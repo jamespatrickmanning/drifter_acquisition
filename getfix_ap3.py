@@ -109,19 +109,21 @@ c=0
 icount=0
 date_all=[]
 for i in files: # this loops through all the json files in the backup directory and saves any unit that is listed in "codes_ap3.dat"
+    if '2016' in i:# or ('2017' in i): # added this on 13 July 2020 to save time but then removed it 10 August when there was evidently trouble Jackalope's first
+        continue
     try:
       with open(i) as data_file:    
         data = json.load(data_file)
-      if data['momentForward'][0]['Device']['esn'][-6:] in esn2: #make sure that is drifter or miniboat data
+      if data['momentForward'][0]['Device']['esn'][-6:] in esn2: #make sure that is drifter or miniboat data where "esn2" comes from codes_ap3
          if int(parser.parse(data['momentForward'][0]['Device']['moments'][0]['Moment']['date']).strftime('%s')) not in date_all: #make sure that this is not a repeat time
-                  date=parser.parse(data['momentForward'][0]['Device']['moments'][0]['Moment']['date'])
-                  date_all.append(date)    
-                  #try: # note that we had to add multiple try/except cases since ASSETLINK apparently changed JSON structure a few times in 2017
-                  try:
+          date=parser.parse(data['momentForward'][0]['Device']['moments'][0]['Moment']['date'])
+          date_all.append(date)    
+          #try: # note that we had to add multiple try/except cases since ASSETLINK apparently changed JSON structure a few times in 2017
+          try:
                      lat=data['momentForward'][0]['Device']['moments'][0]['Moment']['points'][4]['PointLoc']['Lat'] #possibly has problem to read this data
                      lon=data['momentForward'][0]['Device']['moments'][0]['Moment']['points'][4]['PointLoc']['Lon']
                      #battery=data['momentForward'][0]['Device']['moments'][0]['Moment']['points'][6]['Point']['Battery']
-                  except:
+          except:
                      try:
                          lat=data['momentForward'][0]['Device']['moments'][0]['Moment']['points'][3]['PointLoc']['Lat'] #possibly has problem to read this data
                          lon=data['momentForward'][0]['Device']['moments'][0]['Moment']['points'][3]['PointLoc']['Lon']
@@ -135,91 +137,82 @@ for i in files: # this loops through all the json files in the backup directory 
                            lat=data['momentForward'][0]['Device']['moments'][0]['Moment']['points'][6]['PointLoc']['Lat'] #possibly has problem to read this data
                            lon=data['momentForward'][0]['Device']['moments'][0]['Moment']['points'][6]['PointLoc']['Lon']
                            #battery=data['momentForward'][0]['Device']['moments'][0]['Moment']['points'][7]['Point']['Battery']
+          esn=data['momentForward'][0]['Device']['esn']
+          yr1=date.year
+          mth1=date.month
+          day1=date.day
+          hr1=date.hour
+          mn1=date.minute
+          yd1=date2num(datetime.datetime(yr1,mth1,day1,hr1,mn1))-date2num(datetime.datetime(yr1,1,1,0,0))# needed to generate a "yearday" to conform with standard output fields
+          datet=datetime.datetime(yr1,mth1,day1,hr1,mn1,tzinfo=None) # I don't think this line is needed anymore 5/9/2019                   
+		  # added the following line on 6/1/2020 to ignore section of Bobcat miniboat track
 
-		  esn=data['momentForward'][0]['Device']['esn']
-                  
-                  yr1=date.year
-                  mth1=date.month
-                  day1=date.day
-                  hr1=date.hour
-                  mn1=date.minute
-		  
-                  yd1=date2num(datetime.datetime(yr1,mth1,day1,hr1,mn1))-date2num(datetime.datetime(yr1,1,1,0,0))# needed to generate a "yearday" to conform with standard output fields
-		  datet=datetime.datetime(yr1,mth1,day1,hr1,mn1,tzinfo=None) # I don't think this line is needed anymore 5/9/2019                   
-		  #data_send=data['momentForward'][0]['Device']['moments'][0]['Moment']['points'][2]['PointHex']['hex'] # commented this line in April 2019 when I realized it was not needed
-		  try:
-                      # the following several lines added in Sep 2018
-                      index_idn1=np.where(str(esn[-6:])==np.array(esn2))[0][:] # might return multiple values if ESN is used more than once
-                      if len(index_idn1)>1: 
-                        for k in range(len(index_idn1)):
-                           if endtime[index_idn1[k]]>date>starttime[index_idn1[k]]: # made this change 9/19/2018
-                             idx=int(index_idn1[k])# this is index of control file associated with this the set of times & esn 
-                      else:
-                         idx=int(index_idn1)
-                      id_idn1=ide[idx] # where this is the deployment_id associated with this idx case of this time and esn
-                      depth_idn1=-1.0*float(depth[idx]) # made this change 9/21 when the 2nd deployments were not working 
-		      if (lat<>0.00000) and (lon<>0.00000): # added "lon" to this on 28 Mar 2019
-			  project_name=project[idx] # changed this 9/28 from esn2.index(esn[-6:]) to idx
-                          if (project_name=='madeira') or (project_name=='crmm'):
-			     if (id_idn1==182461231) or (id_idn1==182461237) or (id_idn1==188271151):
-                               yr='2018'
-                             else:
-                               yr='2017'
-			     consecutive_batch_name='1'
-			     #print project_name
-			  else:
-                             idstr=str(id_idn1)
-			     yr='20'+idstr[0:2] # generates the year string based on deployment_id
-			     #consecutive_batch_name=consecutive_batch[esn2.index(esn[-6:])]
-                             consecutive_batch_name=consecutive_batch[idx] # changed this 9/28 from esn2.index(esn[-6:]) to idx
-                          if (id_idn1==182461231) and (mth1==2) and (day1==25) and (hr1==18): # bandaid made 3/11/2019 to remove bad Comcomly point fixed 5/23/2019
-                           pass
-                          else:
-                           if (id_idn1==193320801) and (lon>0.):                              # bandaid made 3/28/2019 to remove bad Ashley Hall points	
-                             print 'bad fix'
-                           else: 
-                             if endtime[idx]>date>starttime[idx]: #
-			      #print project_name
-			      if not os.path.exists('/net/pubweb_html/drifter/drift_'+project_name+'_'+yr+'_'+consecutive_batch_name+'_ap3.dat'):
-                                  print '/net/pubweb_html/drifter/drift_'+project_name+'_'+yr+'_'+consecutive_batch_name+'_ap3.dat'
-			          f_output=open('/net/pubweb_html/drifter/drift_'+project_name+'_'+yr+'_'+consecutive_batch_name+'_ap3.dat','w').close()
-			          f_outcsv=open('/net/pubweb_html/drifter/drift_'+project_name+'_'+yr+'_'+consecutive_batch_name+'_ap3.csv','w')
-			          f_outcsv.write("ID,ESN,MTH,DAY,HR_GMT,MIN,YEARDAY,LON,LAT,DEPTH\n")
-			          f_outcsv.close()
-			      f_output=open('/net/pubweb_html/drifter/drift_'+project_name+'_'+yr+'_'+consecutive_batch_name+'_ap3.dat','a')
-			      f_output.write(str(id_idn1).rjust(10)+" "+str(esn[-6:]).rjust(7)+ " "+str(mth1).rjust(2)+ " " +
-			              str(day1).rjust(2)+" " +str(hr1).rjust(3)+ " " +str(mn1).rjust(3)+ " " )
-			      f_output.write(("%11.7f") %(yd1))
-			      f_output.write(" "+("%10.5f") %(lon)+' '+("%10.5f") %(lat)+' '+str(float(depth_idn1)).rjust(4)+ " "
-			              +str(np.nan)+'\n')
-			      f_output.close()        
-			      # csv ouput added May 2016
-			      f_outcsv=open('/net/pubweb_html/drifter/drift_'+project_name+'_'+yr+'_'+consecutive_batch_name+'_ap3.csv','a')
-			      f_outcsv.write(str(id_idn1).rjust(10)+","+str(esn[-6:]).rjust(7)+ ","+str(mth1).rjust(2)+ "," +str(day1).rjust(2)+"," +str(hr1).rjust(3)+ "," +str(mn1).rjust(3)+ "," )
-			      f_outcsv.write(("%10.7f") %(yd1))
-			      f_outcsv.write(","+str(lon).rjust(5)+","+str(lat).rjust(5)+ "," +str(float(depth_idn1)).rjust(4)+"\n")
-			      f_outcsv.close()
-                              
-                              '''
-                              if (esn[-6:]=='085940') or (esn[-6:]=='379700') or (esn[-6:]=='314280'): # this is the special case of crmm and madeira needing to be added to ep_2018
-			        f_output=open('/net/pubweb_html/drifter/drift_ep_2018_1_ap3.dat','a')
-			        f_output.write(str(id_idn1).rjust(10)+" "+str(esn[-6:]).rjust(7)+ " "+str(mth1).rjust(2)+ " " +
-			              str(day1).rjust(2)+" " +str(hr1).rjust(3)+ " " +str(mn1).rjust(3)+ " " )
-			        f_output.write(("%11.7f") %(yd1))
-			        f_output.write(" "+("%10.5f") %(lon)+' '+("%10.5f") %(lat)+' '+str(float(depth_idn1)).rjust(4)+ " "
-			              +str(np.nan)+'\n')
-			        f_output.close()        
-			        # csv ouput added May 2016
-			        f_outcsv=open('/net/pubweb_html/drifter/drift_ep_2018_1_ap3.csv','a')
-			        f_outcsv.write(str(id_idn1).rjust(10)+","+str(esn[-6:]).rjust(7)+ ","+str(mth1).rjust(2)+ "," +str(day1).rjust(2)+"," +str(hr1).rjust(3)+ "," +str(mn1).rjust(3)+ "," )
-			        f_outcsv.write(("%10.7f") %(yd1))
-			        f_outcsv.write(","+str(lon).rjust(5)+","+str(lat).rjust(5)+ "," +str(float(depth_idn1)).rjust(4)+"\n")
-			        f_outcsv.close()
-                               ''' #commented out the block above 9 May 2019 and made all "crmm" to "ep"
-                              
-                              
-		  except:
-		      pass
+          if (str(esn[-6:])=='484660') and ((datet>datetime.datetime(2019,6,8,0,0,tzinfo=None)) and (datet<datetime.datetime(2020,2,21,0,0,tzinfo=None))):
+                      continue
+          #Liberty		  
+          if (str(esn[-6:])=='484980') and ((datet>datetime.datetime(2020,2,24,2,15,tzinfo=None)) and (datet<datetime.datetime(2020,5,29,19,25,tzinfo=None))):
+                      continue
+          if (str(esn[-6:])=='484980') and ((datet>datetime.datetime(2020,5,30,2,41,tzinfo=None)) and (datet<datetime.datetime(2020,5,30,18,43,tzinfo=None))):
+                      continue
+          if (str(esn[-6:])=='484980') and ((datet>datetime.datetime(2020,6,12,6,54,tzinfo=None)) and (datet<datetime.datetime(2020,7,22,12,0,tzinfo=None))):
+                      continue
+          # baot a lahti
+          if (str(esn[-6:])=='085940') and ((datet>datetime.datetime(2018,2,12,14,10,tzinfo=None)) and (datet<datetime.datetime(2018,2,14,17,0,tzinfo=None))):
+                      continue
+          if (str(esn[-6:])=='085940') and ((datet>datetime.datetime(2018,2,23,8,54,tzinfo=None)) and (datet<datetime.datetime(2018,8,30,14,0,tzinfo=None))):
+                      continue
+          if (str(esn[-6:])=='085940') and ((datet>datetime.datetime(2018,9,5,0,2,tzinfo=None)) and (datet<datetime.datetime(2020,3,6,13,0,tzinfo=None))):
+                      continue
+          index_idn1=np.where(str(esn[-6:])==np.array(esn2))[0][:] # might return multiple values if ESN is used more than once
+          if len(index_idn1)>1: 
+                 for k in range(len(index_idn1)):
+                    if endtime[index_idn1[k]]>date>starttime[index_idn1[k]]: # made this change 9/19/2018
+                       idx=int(index_idn1[k])# this is index of control file associated with this the set of times & esn 
+          else:
+                    idx=int(index_idn1)
+          id_idn1=ide[idx] # where this is the deployment_id associated with this idx case of this time and esn
+          # added the following on June 15, 2020
+          #Bobcat
+          if (str(esn[-6:])=='484660') and (datet>datetime.datetime(2020,2,21,0,0,tzinfo=None)):
+                     id_idn1=202471951
+          #Boat a Lahti
+          if (str(esn[-6:])=='085940') and ((datet>=datetime.datetime(2018,2,14,17,0,tzinfo=None)) and (datet<=datetime.datetime(2018,2,23,9,0,tzinfo=None))):
+                     id_idn1=182341192
+          if (str(esn[-6:])=='085940') and ((datet>=datetime.datetime(2018,8,30,14,0,tzinfo=None)) and (datet<=datetime.datetime(2018,9,5,0,2,tzinfo=None))):
+                     id_idn1=188341191
+          if (str(esn[-6:])=='085940') and (datet>=datetime.datetime(2020,3,6,13,0,tzinfo=None)):
+                     id_idn1=203341191
+          #Liberty
+          if (str(esn[-6:])=='484980') and ((datet>=datetime.datetime(2020,5,29,19,0,tzinfo=None)) and (datet<=datetime.datetime(2020,6,12,7,2,tzinfo=None))):
+                     id_idn1=205461251
+          if (str(esn[-6:])=='484980') and (datet>=datetime.datetime(2020,7,22,12,0,tzinfo=None)):
+                     id_idn1=207461251                       
+          depth_idn1=-1.0*float(depth[idx]) # made this change 9/21 when the 2nd deployments were not working 
+          if (lat<>0.00000) and (lon<>0.00000): # added "lon" to this on 28 Mar 2019
+                 project_name=project[idx] # changed this 9/28 from esn2.index(esn[-6:]) to idx
+                 idstr=str(id_idn1)
+                 yr='20'+idstr[0:2] # generates the year string based on deployment_id
+                 consecutive_batch_name=consecutive_batch[idx] # changed this 9/28 from esn2.index(esn[-6:]) to idx
+                 if endtime[idx]>date>starttime[idx]: #
+                     if not os.path.exists('/net/pubweb_html/drifter/drift_'+project_name+'_'+yr+'_'+consecutive_batch_name+'_ap3.dat'):
+                          print '/net/pubweb_html/drifter/drift_'+project_name+'_'+yr+'_'+consecutive_batch_name+'_ap3.dat'
+                          f_output=open('/net/pubweb_html/drifter/drift_'+project_name+'_'+yr+'_'+consecutive_batch_name+'_ap3.dat','w').close()
+                          f_outcsv=open('/net/pubweb_html/drifter/drift_'+project_name+'_'+yr+'_'+consecutive_batch_name+'_ap3.csv','w')
+                          f_outcsv.write("ID,ESN,MTH,DAY,HR_GMT,MIN,YEARDAY,LON,LAT,DEPTH\n")
+                          f_outcsv.close()
+                     f_output=open('/net/pubweb_html/drifter/drift_'+project_name+'_'+yr+'_'+consecutive_batch_name+'_ap3.dat','a')
+                     f_output.write(str(id_idn1).rjust(10)+" "+str(esn[-6:]).rjust(7)+ " "+str(mth1).rjust(2)+ " " +
+    			             str(day1).rjust(2)+" " +str(hr1).rjust(3)+ " " +str(mn1).rjust(3)+ " " )
+                     f_output.write(("%11.7f") %(yd1))
+                     f_output.write(" "+("%10.5f") %(lon)+' '+("%10.5f") %(lat)+' '+str(float(depth_idn1)).rjust(4)+ " "
+    			             +str(np.nan)+'\n')
+                     f_output.close()        
+    			     # csv ouput added May 2016
+                     f_outcsv=open('/net/pubweb_html/drifter/drift_'+project_name+'_'+yr+'_'+consecutive_batch_name+'_ap3.csv','a')
+                     f_outcsv.write(str(id_idn1).rjust(10)+","+str(esn[-6:]).rjust(7)+ ","+str(mth1).rjust(2)+ "," +str(day1).rjust(2)+"," +str(hr1).rjust(3)+ "," +str(mn1).rjust(3)+ "," )
+                     f_outcsv.write(("%10.7f") %(yd1))
+                     f_outcsv.write(","+str(lon).rjust(5)+","+str(lat).rjust(5)+ "," +str(float(depth_idn1)).rjust(4)+"\n")
+                     f_outcsv.close()
     except:
         print 'no drifter data in '+ i
 
@@ -236,7 +229,7 @@ for k in range(len(unique_projects)):
         os.system('cat /net/pubweb_html/drifter/drift_'+unique_projects[k]+'_'+str(kk)+'_1_ap3.dat >> /net/pubweb_html/drifter/drift_'+unique_projects[k]+'_'+str(kk)+'_1.dat')
         os.system('cat /net/pubweb_html/drifter/drift_'+unique_projects[k]+'_'+str(kk)+'_1_ap3.csv >> /net/pubweb_html/drifter/drift_'+unique_projects[k]+'_'+str(kk)+'_1.csv')# added 4/9/2018
         #sort_track_by_time('/net/pubweb_html/drifter/drift_'+unique_projects[k]+'_'+str(kk)+'_1.csv')# added Dec 2019 to fix issues with time being out of order for a few days
-      for kk in range(2016,2021):# added 2016 on 4/12/2018
+      for kk in range(2018,2021):# added 2016 on 4/12/2018, removed 2016 and 2017 on 7/20/2020
         #os.system('cat /net/pubweb_html/drifter/drift_'+unique_projects[k]+'_'+str(kk)+'_1.dat >> /net/pubweb_html/drifter/drift_X.dat')# added 9/18/2019 when not all miniboats showed up in stats
         os.system('cat /net/pubweb_html/drifter/drift_'+unique_projects[k]+'_'+str(kk)+'_1_ap3.dat >> /net/pubweb_html/drifter/drift_X.dat')
         dd=pd.read_csv('/net/pubweb_html/drifter/drift_'+unique_projects[k]+'_'+str(kk)+'_1_ap3.csv') #uncommented 6/4/18
@@ -257,8 +250,8 @@ for k in range(len(unique_projects)):
       os.system('cat /net/pubweb_html/drifter/drift_'+unique_projects[k]+'_2018_1_ap3.dat >> /net/pubweb_html/drifter/drift_ep_2018_1.dat')
   print 'added _ap3.dat to .dat file and drift_X.dat'
 # now run drift2xml on these new .dat files that include both GLOBALSTAR (SmartOne) and IRIDIUM (AP3) results
-pipe1 = subprocess.Popen(['/home/jmanning/anaconda2/bin/python','/net/home3/ocn/jmanning/py/drift2xml.py','drift_ep_2016_1'])
-pipe2 = subprocess.Popen(['/home/jmanning/anaconda2/bin/python','/net/home3/ocn/jmanning/py/drift2xml.py','drift_ep_2016_2'])
+#pipe1 = subprocess.Popen(['/home/jmanning/anaconda2/bin/python','/net/home3/ocn/jmanning/py/drift2xml.py','drift_ep_2016_1']) # commented out 7/20/2020
+#pipe2 = subprocess.Popen(['/home/jmanning/anaconda2/bin/python','/net/home3/ocn/jmanning/py/drift2xml.py','drift_ep_2016_2']) # commented out 7/20/2020
 pipe3 = subprocess.Popen(['/home/jmanning/anaconda2/bin/python','/net/home3/ocn/jmanning/py/drift2xml.py','drift_ep_2017_1'])
 pipe4 = subprocess.Popen(['/home/jmanning/anaconda2/bin/python','/net/home3/ocn/jmanning/py/drift2xml.py','drift_ep_2018_1'])
 pipe4 = subprocess.Popen(['/home/jmanning/anaconda2/bin/python','/net/home3/ocn/jmanning/py/drift2xml.py','drift_ep_2019_1'])# added this feb 1, 2019
