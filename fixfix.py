@@ -3,17 +3,21 @@
 Created on Mon Feb 6 05:40:32 2023
 @author: JiM 
 
-Note: This is a simplified version of "old_fixfix.py"  
+Note: This is a simplified version of "old_fixfix.py" but it still may need to:
+    - lookat acceleration? 
+    - consider adding metadata to output to fill Carles column info?
+    - save/archive plots with original data included?
+    - consider making a automated realtime operational version that does not require human clicks?
 """
 
-## STEPS ARE AS FOLLOWS:
-#    - load all the ascii data file from one cluster
-#    - for each drifter it conducts 6 basic steps
+## BASIC STEPS ARE AS FOLLOWS:
+#    - load all the ascii data file from one cluster and then, for each drifter, it:
 #    - eliminate repeat times
-#    - calculate forward and backward differences (velocity) and eliminate bad points
-#    - writes meta data to log file
-#    - check for drogue loss
-#    - clean plots of track (pth) and velocity uv_id_final.png)
+#    - calculate velocity
+#    - bar chart u & v velocity 
+#    - click on bad points in speed plot
+#    - click on a range of bad point in speed plot
+#    - click on bad points in Cartopy track plot
 #    - generates oracle ready ascii file
 ##################################################################################################
 import os
@@ -31,10 +35,15 @@ import os
 import pandas as pd
 import matplotlib.dates as mdates
 from pylab import *
-
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+import shapely.geometry as sgeom
+import cartopy
+import cartopy.crs as ccrs
+import cartopy.io.shapereader as shpreader
 
 ####HARDCODES############################
-lab='glerl'
+lab='fhs'
 yearstr='2022'
 consec='1' # batch of drifters this year
 processbatch='feb2022' # process session to name file which documents ids processed
@@ -53,14 +62,16 @@ plotdir="/home/user/drift/process/plots/" # directory where the final plots are 
 ####### DEFINE INPUT AND OUPUT BASED ON HARDCODES ABOVE AND OPEN SOME LOG FILES TO APPEND TO########################
 # open some files
 outdir=outdir_base+lab+'/'+yearstr
+if not os.path.exists(outdir): os.makedirs(outdir)
 fn='drift_'+lab+'_'+yearstr+'_'+consec+'.'+input_format
 print('processing '+fn)
 al=pd.read_csv(outdir_base+'already_loaded_ids.dat','r') # how do we create this file? see 'drift_cookbook'
+if not os.path.exists(outdir): os.makedirs(outdir)
 fido=open(outdir+'/prep_for_oracle_'+fn[6:],'w') # OPENS OUPUT FILE
 fidids=open(outdir_base+"drift2header_"+processbatch+".dat","w") # list of ids processed needed for making header
 fid=open(outdir_base+"drift.log","w")#permanent log file that is appended to../home3/ocn/jmanning/drift/drift.log
 fid.write('\n'+'#'*40+' below is '+str(fn)+' log '+'#'*40+'\n') # start new section in log file
-if not os.path.exists(outdir): os.makedirs(outdir)
+
 #year=int(fn.split('_')[2])# assumes the year appears in the filename after the first two underscores
 year=int(yearstr)
 year1=year # this does not get incremented
@@ -86,6 +97,7 @@ df=pd.read_csv(input_dir+fn)
 df['temps']=['nan' for i in range(len(df))]# creates "temps" since some input files do not have a temps column
 ids=np.sort(list(set(df.ID)))
 
+#Loop through each drifter in the file
 for k in range(len(ids)): #where "ids" is a sorted list of distinct ids and int latitude, longitude, time
   # check to see if this id was already loaded into ORACLE
   fid.write('Drifter '+str(ids[k])+'\n')
@@ -95,6 +107,7 @@ for k in range(len(ids)): #where "ids" is a sorted list of distinct ids and int 
     strattle=0
     year=year1 # assumes all units from this batch start at the same year
     df1=df[df.ID==ids[k]]
+    
     #generate a datetime column
     datet=[]
     for i in range(len(df1)):
@@ -107,23 +120,23 @@ for k in range(len(ids)): #where "ids" is a sorted list of distinct ids and int 
     df1['datet']=datet
     print("there are ", len(df1.LAT), "original fixes for id =",ids[k])    
 
-    # STEP 1a: check for repeat time
-    orig=len(df1)# original length of df1
-    df1.drop_duplicates(inplace=True)
-    numdupl=str(orig-len(df1))
-    print('There are '+numdupl+' removed.')
+    # check for repeat time
+    #df2=df1.drop_duplicates(inplace=True)
+    df2=df1.drop_duplicates()
+    df2.reset_index(drop=True, inplace=True) 
+    numdupl=str(len(df1)-len(df2))
+    print(numdupl+' duplicates removed.')
     fid.write('   '+numdupl+' points deleted with the same times'+'\n')
-    df1.drop_duplicates(inplace=True)
     
     
-    if len(df1)>2: # continue if there is more than one fix
-     ### Calculate u & v component of velocity
-     u,v,spd,jdn=ll2uv_datetime(df1.datet.values,df1.LAT.values,df1.LON.values)# was yeardays but now uses "time" as of 3/29/2012
+    if len(df2)>2: # continue if there is more than one fix
 
-     # STEP 1b: look at histogram of u & v to check for outliers visually
-     #fig=plt.figure(1)
-     kw = dict(histtype='stepfilled', alpha=0.5)#, normed=True)
+     ### Calculate u & v component of velocity
+     u,v,spd,jdn=ll2uv_datetime(df2.datet.values,df2.LAT.values,df2.LON.values)# old_fixfix used yearday for time but now we use datatime
+
+     # plot histogram of u & v to check for outliers visually
      fig, (ax0, ax1) = plt.subplots(ncols=2, sharex=True, sharey=True)
+     kw = dict(histtype='stepfilled', alpha=0.5)#, normed=True)
      ax0.hist(u, **kw)
      ax1.hist(v, **kw)
      _ = ax1.set_title('v')
@@ -138,21 +151,23 @@ for k in range(len(ids)): #where "ids" is a sorted list of distinct ids and int 
         for i in range(len(idlow)):
             print('WARNING: Drifter ',str(ids[k]),' may be hung up on gear or aground on ',str(jdn[idlow[i]]),' where velocity is < 1# mean')
 
-     #### find bad velocities where criteria was just calculated
+     #### find bad velocities after calculating a reasonable criteria for this drifter
      # calculate a reasonable criteria for this drifter
      crit=np.mean([abs(i) for i in spd])*critfactor
      print("\n Velocity criteria set to ", str(critfactor),' times the mean or ',str(crit),' cm/s')
      idbadf=list(np.where(abs(np.array(spd))>crit)[0])
      #we want to remove these bad points from df1
-     df1.drop(idbadf,axis=0,inplace=True)
+     df3=df2.drop(idbadf,axis=0)
+     df3.reset_index(drop=True, inplace=True) 
        
 
      # remove bad points based on speed plot
-     idgood=len(df1)
-     fig=plt.figure(2)
+     u,v,spd,jdn=ll2uv_datetime(df3.datet.values,df3.LAT.values,df3.LON.values)
+     idgood=len(df3)
+     fig2=plt.figure(2)
      plt.plot(pd.to_datetime(jdn),spd)
      plt.plot(pd.to_datetime(jdn),spd,marker="o",markerfacecolor="r",linestyle='None')
-     fig.autofmt_xdate()
+     fig2.autofmt_xdate()
      thismanager = plt.get_current_fig_manager()
      thismanager.window.setGeometry(0,800,1500, 500)
      plt.title(str(ids[k])+' resultant velocity')
@@ -161,28 +176,30 @@ for k in range(len(ids)): #where "ids" is a sorted list of distinct ids and int 
      badpoints=ginput(n=0,timeout=timetoedit)
      print('badpoints = ',badpoints)#,timeout=10)
      index_badpoints=[]
-     plt.close(fig)
+     plt.close(fig2)
      badpoints_num=len(badpoints)
      if badpoints_num!=0:
        for i in range(badpoints_num):
            index_badpoints.append(closest_node(badpoints[i], tuple(zip(date2num(jdn),spd))))  # get closest point in 2 dimensions
        print(index_badpoints )    
-       print("%10.2f percent bad velocities deleted according to manual clicks on velocity" % float(float(badpoints_num)/len(df1)*100.))
-       df1.drop(df1.index[index_badpoints],axis=0,inplace=True)
+       print("%10.2f percent bad velocities deleted according to manual clicks on velocity" % float(float(badpoints_num)/len(df3)*100.))
+       df4=df3.drop(df3.index[index_badpoints],axis=0)
+       df4.reset_index(drop=True, inplace=True) 
       
      # remove bad points between two clicks after redrawing time series plot
-     fig=plt.figure(3)
-     fu2,fv2,spd2,jd2=ll2uv_datetime(df1.datet.values,df1.LAT.values,df1.LON.values)
+     fig3=plt.figure(3)
+     fu2,fv2,spd2,jd2=ll2uv_datetime(df4.datet.values,df4.LAT.values,df4.LON.values)
      plt.plot(pd.to_datetime(jd2),spd2,'mo-',markersize=5)#marker='o',markerfacecolor="r",linestyle='None')
-     fig.autofmt_xdate()
+     fig3.autofmt_xdate()
      thismanager = plt.get_current_fig_manager()
      thismanager.window.setGeometry(0,800,1500, 500)        
      plt.title(str(ids[k]))
      plt.show()     
-     del_between=input('Do you want to delete all the points between two points? [default n]') or "n"
+     #del_between=input('Do you want to delete all the points between two points? [default n]') or "n"
+     del_between='y'
      if del_between=="Y" or del_between=="y" :
           print("Please click the first bad point and the last bad point to choose the range of the bad points")
-          thismanager = plt.get_current_fig_manager()
+          #thismanager = plt.get_current_fig_manager()
           between_badpoints=ginput(n=2)
           index_between_badpoints=[]
           for i in range(len(between_badpoints)):
@@ -190,37 +207,49 @@ for k in range(len(ids)): #where "ids" is a sorted list of distinct ids and int 
           index_betweens=[]
           for i in range(sorted(index_between_badpoints)[0],sorted(index_between_badpoints)[1]+1):
               index_betweens.append(i)
-          del_between_badpoints=sorted(index_between_badpoints)[1]-sorted(index_between_badpoints)[0]+1
-          badpoints_num=len(badpoints)+del_between_badpoints
-          print("%10.2f percent editted due to bad velocities from manual clicks between two points" % float(float(badpoints_num)/len(df1)*100.))
-          df1.drop(df1.index[index_betweens],inplace=True)
-     plt.close(fig)
+          #del_between_badpoints=sorted(index_between_badpoints)[1]-sorted(index_between_badpoints)[0]+1
+          #adpoints_num=len(badpoints)+del_between_badpoints
+          #print("%10.2f percent editted due to bad velocities from manual clicks between two points" % float(float(badpoints_num)/len(df1)*100.))
+          df5=df4.drop(df4.index[index_betweens],axis=0)
+          df5.reset_index(drop=True, inplace=True) 
+     plt.close(fig3)
      
      # redraw time series plot
-     fig=plt.figure(4)
-     fu3,fv3,spd3,jd3=ll2uv_datetime(df1.datet.values,df1.LAT.values,df1.LON.values)
-     #plot_speed(jd3,spd3)
+     fig4=plt.figure(4)
+     fu3,fv3,spd3,jd3=ll2uv_datetime(df5.datet.values,df5.LAT.values,df5.LON.values)
      plt.plot(pd.to_datetime(jd3),spd3,'bo-')  
-     fig.autofmt_xdate()
+     fig4.autofmt_xdate()
      thismanager = plt.get_current_fig_manager()
-     #thismanager.window.SetPosition((2000, 0))
      thismanager.window.setGeometry(0,800,900, 500)     
      plt.title(str(ids[k])+' resultant velocities after edits')
      plt.ylabel('cm/s')# added 6/4/2019 without testing
      plt.show()
      print('\n replotted velocity ... pausing for '+str(timetoedit)+' seconds')
-     pause(timetoedit)
+     #pause(timetoedit)
 
      #step 5a:
-     #manually delete points based on track where we zoom into each bad point noted in first clciks
-     fig=plt.figure(5)
-     plt.plot(df1.LON.values,df1.LAT.values,'ro-')
+     #manually delete points based on track where we zoom into each bad point noted in first clicks
+     fig5=plt.figure(5)
+     ax = plt.axes(projection=cartopy.crs.PlateCarree())
+     track = sgeom.LineString(zip(df5.LON, df5.LAT))
+     ax.scatter(df5.LON, df5.LAT, zorder=5, color="red", s=3,label="fixed")
+     b=(max(df5.LAT)-min(df5.LAT))/10.# border of 10% range
+     ax.set_xlim([min(df5.LON)-b, max(df5.LON)+b])
+     ax.set_ylim([min(df5.LAT)-b, max(df5.LAT)+b])
+     ax.add_geometries([track], ccrs.PlateCarree(),facecolor='none')
+     ax.add_feature(cartopy.feature.LAND)
+     ax.add_feature(cartopy.feature.OCEAN)
+     ax.add_feature(cartopy.feature.COASTLINE)
+     ax.add_feature(cartopy.feature.BORDERS, linestyle=':')
+     ax.add_feature(cartopy.feature.LAKES, alpha=0.5)
+     ax.add_feature(cartopy.feature.RIVERS)
+     ax.gridlines(draw_labels=True, dms=True, x_inline=False, y_inline=False)
      thismanager = plt.get_current_fig_manager()
      thismanager.window.setGeometry(1000,0,900, 800)     
      plt.title(str(ids[k])+' track AFTER edits')
      plt.show()
      #del_between=input('\n Do you want to delete the points? [default n]') or "n"
-     del_between='n'
+     del_between='y'
      badplotpts=[] 
      if del_between=="Y" or del_between=="y":
        print('click on any obviously bad points and then press the enter key on the track. You have '+str(timetoedit)+' seconds.')
@@ -230,7 +259,7 @@ for k in range(len(ids)): #where "ids" is a sorted list of distinct ids and int 
        if len(bad)>0:
          for kbad in range(len(bad)):
            fig=plt.figure(7)
-           plt.plot(df1.LON,df1.LAT,'ro-')
+           plt.plot(df5.LON,df5.LAT,'ro-')
            ylim(bad[kbad][1]-.1,bad[kbad][1]+.1)
            xlim(bad[kbad][0]-.1,bad[kbad][0]+.1)
            thismanager = plt.get_current_fig_manager()
@@ -238,32 +267,36 @@ for k in range(len(ids)): #where "ids" is a sorted list of distinct ids and int 
            plt.show()
            print('click on any obviously bad points and then press the enter key. You have '+str(timetoedit)+' seconds.')
            bad1=ginput(n=1,timeout=timetoedit)
-           badplotpts.append(closest_node(bad1, zip(lon,lat)))
-       ylim(min(lat),max(lat))
-       xlim(min(lon),max(lon))
+           badplotpts.append(closest_node(bad1, tuple(zip(df5.LON,df5.LAT))))# added "-1" 2/22/22
+       #ylim(min(df5.LAT),max(df5.LAT))
+       #xlim(min(df5.LON),max(df5.LON))
+       plt.close()
        print('# bad pts'+str(len(badplotpts)))
        for kj in badplotpts:
-           plt.plot(df1.LON[kj],df1.LAT[kj],'bo')
+           ax.plot(df5.LON[kj],df5.LAT[kj],'bo')
        thismanager = plt.get_current_fig_manager()
        thismanager.window.setGeometry(50,100,640, 545)  
        plt.show()
        print('before and after length of pts')
-       print('before delete len='+str(len(df1)))
+       print('before delete len='+str(len(df5)))
        for i in sorted(badplotpts)[::-1]:
-         plt.plot(df1.LON[i],df1.LAT[i],'mo')
-       print('after delete len='+str(len(lon)))
-       df1.drop(badplotpts,inplace=True)
-       plt.plot(df1.LON[i],df1.LAT[i],'co-')
+         ax.plot(df5.LON[i],df5.LAT[i],'mo')
+       df6=df5.drop(df5.index[badplotpts])
+       df6.reset_index(drop=True, inplace=True) 
+       print('after delete len='+str(len(df6)))
+       ax.plot(df6.LON,df6.LAT,'co-')
        thismanager = plt.get_current_fig_manager()
        thismanager.window.setGeometry(50,100,640, 545) 
+       ax.set_xlim([min(df6.LON)-b, max(df6.LON)+b])
+       ax.set_ylim([min(df6.LAT)-b, max(df6.LAT)+b])
        plt.show()
        input(str(len(badplotpts))+' deleted from manual click on track. Press return to continue')  
      if k!=len(ids)-1:        
-        raw_input("\n Press Enter to process next drifter")
+        input("\n Press Enter to process next drifter")
   else:
      print(str(ids[k])+' is already loaded in ORACLE' ) 
 fido.close()
 fid.close()
 fidids.close()
-df1.drop(['MTH','DAY', 'HR_GMT', 'MIN', 'YEARDAY','temps'],inplace=True)
-df1.to_csv(outdir+'prep_for_oracle_'+fn)
+df6.drop(['MTH','DAY', 'HR_GMT', 'MIN', 'YEARDAY','temps'],axis=1,inplace=True)
+df6.to_csv(outdir+'/prep_for_oracle_'+fn)
