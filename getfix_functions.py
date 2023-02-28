@@ -5,12 +5,27 @@ def getwplot(infile):
    caseid=[1,1,1]
    startyd=[dt(2022,11,13,21,0,0),dt(2022,12,2,12,30,0),dt(2022,12,2,12,0,0)]
    endyd=[dt(2030,8,26,18,10,0),dt(2022,12,26,15,10,0),dt(2030,8,26,18,10,0)]
+ if str(infile)=='drift_smcc_2023_1.dat':
+   including=[4528766,4537088]
+   caseid=[1,1]
+   startyd=[dt(2023,2,16,12,40,0),dt(2023,2,16,12,40,0)]
+   endyd=[dt(2030,8,26,18,10,0),dt(2030,8,26,18,10,0)]
+ if str(infile)=='drift_fpds_2023_1.dat':
+   including=[4528858]
+   caseid=[1]
+   startyd=[dt(2023,2,16,12,40,0)]
+   endyd=[dt(2030,8,26,18,10,0)]
+ if str(infile)=='drift_cadi_2023_1.dat':
+   including=[4536410,4531329,4528784,4531542]
+   caseid=[1,1,1,1]
+   startyd=[dt(2023,2,16,12,40,0),dt(2023,2,16,12,40,0),dt(2023,2,16,12,40,0),dt(2023,2,16,12,40,0)]
+   endyd=[dt(2030,8,26,18,10,0),dt(2030,8,26,18,10,0),dt(2030,8,26,18,10,0),dt(2030,8,26,18,10,0)]
  if str(infile)=='drift_glerl_2022_1.dat':
    including=[1350645]
    caseid=[1]
    startyd=[dt(2022,3,16,12,40,0)]
    endyd=[dt(2030,8,26,18,10,0)]
- if str(infile)=='drift_jml_2022_3.dat':
+ if str(infile)=='drift_jml_2023_1.dat':
    including=[3351589,3342429,3351974,3353539,3351586,3350345]
    caseid=[2,2,2,2,2,2]
    startyd=[dt(2022,11,9,0,30,0),dt(2022,11,9,0,50,0),dt(2022,11,9,0,30,0),dt(2022,11,9,0,50,0),dt(2022,11,9,0,0,0),dt(2022,11,9,0,0,0)]
@@ -35,11 +50,16 @@ def getwplot(infile):
   caseid=[1]
   startyd=[dt(2022,11,13,21,0,0)]
   endyd=[dt(2030,8,26,18,10,0)]
- if str(infile)=='drift_mbs_2022_1.dat':
+ if str(infile)=='drift_mbs_2023_1.dat':
   including=[3352402,3353881]
   caseid=[1,1]
   startyd=[dt(2022,12,1,1,0,0),dt(2022,12,1,1,0,0)]
   endyd=[dt(2030,8,26,18,10,0),dt(2030,8,26,18,10,0)]
+ if str(infile)=='drift_fhs_2023_1.dat':
+  including=[1350310]
+  caseid=[2]
+  startyd=[dt(2023,2,10,1,0,0)]
+  endyd=[dt(2030,8,26,18,10,0)]
  if str(infile)=='drift_fhs_2022_1.dat':
   including=[1367839,1350310,1350318,1374026]
   caseid=[1,1,1,1]

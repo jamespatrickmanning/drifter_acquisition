@@ -86,7 +86,7 @@ for i in range(len(including)):
       if line[1:4]=='stu' and len(line)>95:
         pid=line[59:95] # get "packet ID" needed to confirm reciept later in the program
       if line[1:4]=='esn':
-        if ((line[7]=='1') or (line[7]=='3')) and (line[13]!='<'): #7-digit SmartOne transmitter modified this line in May 2019 to accept the new Solar Smartones starting with "3"  
+        if ((line[7]=='1') or (line[7]=='3') or (line[7]=='4')) and (line[13]!='<'): #7-digit SmartOne transmitter modified this line in May 2019 to accept the new Solar Smartones starting with "3"  
           idn1=int(line[7:14])# ESN number
         elif line[11]=='<': #AP2s!!
           idn1=int(line[7:11])
