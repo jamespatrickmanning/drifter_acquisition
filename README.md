@@ -5,6 +5,7 @@ The full story of this development (with links to various detailed notes) is cur
 
 https://docs.google.com/document/d/1JwuvELNuJnx6OV4QjebwDt9m1HNjVQ4q4QrfiGm6pqY/edit
 
+There is also a set of code to deal with the metadata processing such as "update_drift_header.py" and "get_web_driftheader.py" which prepares data for the old "drift_header" ORACLE table. 
 
 Note: The code in this folder now includes the "fixfix.py" routine which does the QA/QC prior to loading tracks in the database.
 There is also some code for processing USCG data and other miscellaneous utilities.
