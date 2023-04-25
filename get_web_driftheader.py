@@ -16,6 +16,7 @@ from matplotlib.dates import num2date,date2num
 import sys
 #sys.path.append("/home3/ocn/jmanning/py/mygit/modules/")
 from conversions import distance,dm2dd,dd2dm
+from get_web_driftheader_functions import read_codes_names,get_drifter_type#,get_depth
 #from pydap.client import open_url
 import numpy as np
 ###################################
@@ -25,65 +26,28 @@ inputfile="/net/data5/jmanning/drift/sqldump_header_mar2023.dat"
 #outputfile="/net/data5/jmanning/drift/drift2header_mar2020.out"
 outputfile="drift2header_mar2023.out"
 ##################################
-def read_codes_names(id0):
-  # get id,depth from /data5/jmanning/drift/codes.dat
-  inputfile1="codes.dat"
-  path1="/net/data5/jmanning/drift/"
-  path1="../"
-  f1=open(path1+inputfile1,'r')
-  name=''
-  lab=''
-  depth=999
-  for line in f1:
-    id=line.split()[1]
-    dep=line.split()[2]
-    if (int(id)==id0):
-      if (len(line.split())>3):# and (float(dep)==0.1):
-        depth=line.split()[2]
-        name=line.split()[3]
-        lab=line.split()[4]
-        print(name,lab,depth)
-      else:
-        lab=''
-        name=''
-        depth=dep
-  f1.close()
-  return name,lab,depth
-
-def get_drifter_type(string):
-    type_d=''
-    drift_type=['irina','cassie','eddie','rachel']
-    for i in drift_type:
-        if string.lower().find(i)!=-1:
-            type_d=i
-    if  type_d=='':
-        type_d='null'
-    return type_d    
-
 #f = urllib.urlopen("http://www.nefsc.noaa.gov/drifter")
-#f = urllib.urlopen("http://www.nefsc.noaa.gov/drifter/test_small.html")
-f=urllib.request.urlopen("http://studentdrifters.org/tracks/index.html")
+f = urllib.request.urlopen("http://studentdrifters.org/tracks/index.html")
+#f = urllib.request.urlopen("file:/home/user/drift/web/Drifters/index_2021.html")
 
-#
-#f2= open(inputfile)           #you may need to change this path
-#data_raw=f2.readlines()
-#data_raw_id=[int(data_raw[s][:10]) for s in range(len(data_raw))] # list of  ids missing in header 
 data_raw_id=list(pd.read_csv('ids_missing_from_drift_header_mar2023.dat',header=None).drop_duplicates()[1].values) # list of IDs of interest 
 n=np.nan
 html = f.read() # reads web page
-soup = BeautifulSoup(html)
+soup = BeautifulSoup(html,features="html.parser")
 table = soup.find("table")
 rows = table.findAll("tr")
 soup_all=soup.find_all('a')     # convert html data to 
 drift_html=[]
 for i in range(len(soup_all)):
     if str(soup_all[i])[:15]=='<a href="drift_': 
-       if (str(soup_all[i]).split(">")[0][-3:]=='csv') or (str(soup_all[i]).split(">")[0][-4:-1]=='dat'): # this finds csv file
-           drift_html.append(str(soup_all[i]).split(">")[0][9:-1])
+        if  ('_ep_' not in str(soup_all[i])) and  ('_dick_' not in str(soup_all[i])) and ('cfcc' not in str(soup_all[i])) and ('madeira' not in str(soup_all[i])) and ('crmm' not in str(soup_all[i])):# and ('_tes_' not in str(soup_all[i])):  #excludes miniboats
+            if (str(soup_all[i]).split(">")[0][-4:-1]=='csv') or (str(soup_all[i]).split(">")[0][-4:-1]=='dat'): # this finds csv file
+                drift_html.append(str(soup_all[i]).split(">")[0][9:-1])
     
 x = 0
 tables=[]
 for tr in rows:
+  if ('Educational Passages' not in str(tr)) and ('sailboats' not in str(tr)):
     cols = tr.findAll("td")
     if not cols: 
         # when we hit an empty row, we should not print anything to the workbook
@@ -94,41 +58,53 @@ for tr in rows:
         texte_bu = texte_bu.encode('utf-8')
         texte_bu = texte_bu.strip()
         tables.append(texte_bu)
-tables=tables[10:] # get rid of the header line
+#tables=tables[10:] # get rid of the header line
 for kk in range(len(tables)):
     tables[kk]=tables[kk].decode("utf-8")
 data_all=[]
 data_html=[]
-#drift_html=list(set(drift_html))
 for i in range(len(drift_html)-1): # JiM added this "-1" in March 2020
-    if tables[10*i+7]=='done':     #find the table that we need. 
-        #df=pd.read_csv('http://www.nefsc.noaa.gov/drifter/'+drift_html[i])
-        #df=pd.read_csv('http://studentdrifters.org/tracks/'+drift_html[i])
-        df=pd.read_csv('../'+drift_html[i][:-4]+'.csv')
+    if (tables[10*i+7]=='done') or (tables[10*i+7]=='underway'):     #find the table that we need. 
+        try:
+            df=pd.read_csv('../'+drift_html[i][:-4]+'.csv')
+        except:
+            try:
+                df=pd.read_csv('../web/Drifters/'+drift_html[i][:-4]+'.csv')
+            except:
+                try:
+                    df=pd.read_csv('https://studentdrifters.org/tracks/'+drift_html[i][:-4]+'.csv')
+                except:
+                    print('No data available for '+drift_html[i])
+                    continue
         if len(df)==0:
             continue
+        if len(df.columns)==11: # this is the case where index is included 
+            df=df.drop('Unnamed: 0',axis=1)
         print(drift_html[i])
-        data_all.append(list(df.iloc[0])) # gets the first row
+        data_all.append(list(df.iloc[0])) # gets the first row of drifter data for this first drifter
         # now get all the info about this deployment id
-        if str(int(df.iloc[0][0])) in tables[10*i+9]:
+        if str(int(df.iloc[0]['ID'])) in tables[10*i+9]:
             for s in tables[10*i+9].split(';'):
-                if str(int(list(df.iloc[0])[0])) in s:
+                if str(int(df.iloc[0]['ID']))in s:
                     print('111111111111111111111111111111111111111111111111111111111111111111111')
-                    data_html.append([tables[10*i],tables[10*i+1],tables[10*i+2],tables[10*i+3],tables[10*i+4],tables[10*i+5],get_drifter_type(tables[10*i+7]),tables[10*i+8],drift_html[i].split('_')[1],s])
+                    data_html.append([tables[10*i],tables[10*i+1],tables[10*i+2],tables[10*i+3],tables[10*i+4],tables[10*i+5],get_drifter_type(tables[10*i+7]),s])
                     
         else:
             
-            data_html.append([tables[10*i],tables[10*i+1],tables[10*i+2],tables[10*i+3],tables[10*i+4],tables[10*i+5],get_drifter_type(tables[10*i+7]),tables[10*i+8],drift_html[i].split('_')[1],tables[10*i+9]])
+            data_html.append([tables[10*i],tables[10*i+1],tables[10*i+2],tables[10*i+3],tables[10*i+4],tables[10*i+5],get_drifter_type(tables[10*i+7]),tables[10*i+9]])
         
         for nn in range(1,len(df)):
-            if list(df.iloc[nn])[0]!=list(df.iloc[nn-1])[0]: # finds other id 
+            #if list(df.iloc[nn])[1]!=list(df.iloc[nn-1])[1]: # finds other id 
+            if df['ID'][nn]!=df['ID'][nn-1]: # finds other id 
                 data_all.append(list(df.iloc[nn]))
-                if str(int(df.iloc[nn][0])) in tables[10*i+9]:
+                #if str(int(df.iloc[nn][1])) in tables[10*i+9]:
+                if str(int(df['ID'][nn])) in tables[10*i+9]:
                     for s in tables[10*i+9].split(';'):
-                            if str(int(list(df.iloc[nn])[0])) in s:
-                                data_html.append([tables[10*i],tables[10*i+1],tables[10*i+2],tables[10*i+3],tables[10*i+4],tables[10*i+5],get_drifter_type(tables[10*i+7]),tables[10*i+8],drift_html[i].split('_')[1],s])
+                            #if str(int(list(df.iloc[nn])[1])) in s:
+                            if str(int(df['ID'][nn])) in s:
+                                data_html.append([tables[10*i],tables[10*i+1],tables[10*i+2],tables[10*i+3],tables[10*i+4],tables[10*i+5],get_drifter_type(tables[10*i+7]),s])
                 else:
-                    data_html.append([tables[10*i],tables[10*i+1],tables[10*i+2],tables[10*i+3],tables[10*i+4],tables[10*i+5],get_drifter_type(tables[10*i+7]),tables[10*i+8],drift_html[i].split('_')[1],tables[10*i+9]])
+                    data_html.append([tables[10*i],tables[10*i+1],tables[10*i+2],tables[10*i+3],tables[10*i+4],tables[10*i+5],get_drifter_type(tables[10*i+7]),tables[10*i+9]])
                 #data_html.append([tables[10*i],tables[10*i+1],tables[10*i+2],tables[10*i+3],tables[10*i+4],tables[10*i+5],get_drifter_type(tables[10*i+7]),tables[10*i+8],drift_html[i].split('_')[1]])
 lis=[] # distinct ids from the csv file
 for x in range(len(data_all)):
@@ -136,82 +112,63 @@ for x in range(len(data_all)):
 num1=0
 both_in_lis=[] 
 
+'''
 for i in range(len(lis)):
     if lis[i] in data_raw_id: #where data_raw_id come from the sqldump file
         #print 'in sqldump_header: '+str(lis[i])
         both_in_lis.append(lis[i])
         num1+=1
-idd,lat_start,lon_start,start_date,end_date,deployer,institute,project,ndays,notes,esn,pi,yrday0_gmt,lat_end,lon_end,dds,dde,dd,depth,drift_type,start_depth,end_depth,manufacturer,sat=[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]
+'''
+idd,lat_start,lon_start,start_date,end_date,deployer,institute,project,ndays,notes,esn,pi,yrday0_gmt,lat_end,lon_end,dds,dde,dd,depth,type,start_depth,end_depth,manufacturer,sat=[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]
 dict_data_raw={}
-#for q in range(len(data_raw_id)): # for each id we got from sqldump
 for p in range(len(data_all)): # for each id we got from data files
 
         #if lis[p]==data_raw_id[q]: # where "lis" is the integer version of data_all
-        if lis[p]==lis[0]:
-            idd.append(lis[p])
-            '''
-            [las,los]=dd2dm(float(data_raw[q][0:data_raw[q].index('\n')].split(' ')[3]),float(data_raw[q][0:data_raw[q].index('\n')].split(' ')[2]))
-            lat_start.append(las)
-            lon_start.append(los)
-            #start_depth.append(round(get_w_depth([float(data_raw[q][0:data_raw[q].index('\n')].split(' ')[2])],[float(data_raw[q][0:data_raw[q].index('\n')].split(' ')[3])])[0][0],1))
-            start_depth.append('null')
-            #start_date.append(num2date(date2num(dt.datetime(int(data_raw[q][0:data_raw[q].index('\n')].split(' ')[1])+2000,1,1))+float(data_raw[q][0:data_raw[q].index('\n')].split(' ')[2])).strftime("%d-%b-%Y:%H%M"))
-            sdate=dt.datetime(int(data_raw[q][0:data_raw[q].index('\n')].split(' ')[8][6:10]),int(data_raw[q][0:data_raw[q].index('\n')].split(' ')[8][0:2]),int(data_raw[q][0:data_raw[q].index('\n')].split(' ')[8][3:5]),int(data_raw[q][0:data_raw[q].index('\n')].split(' ')[8][11:13]),int(data_raw[q][0:data_raw[q].index('\n')].split(' ')[8][14:16]))
-            start_date.append(sdate)
-            edate=dt.datetime(int(data_raw[q][0:data_raw[q].index('\n')].split(' ')[9][6:10]),int(data_raw[q][0:data_raw[q].index('\n')].split(' ')[9][0:2]),int(data_raw[q][0:data_raw[q].index('\n')].split(' ')[9][3:5]),int(data_raw[q][0:data_raw[q].index('\n')].split(' ')[9][11:13]),int(data_raw[q][0:data_raw[q].index('\n')].split(' ')[9][14:16]))
-            end_date.append(edate)
-            ndays.append((edate-sdate).days)
-            '''
-            lat_start.append(n);lon_start.append(n);start_date.append(n);end_date.append(n);ndays.append(n);start_depth.append(n);end_depth.append(n)
-            [pi1,institute1,dep]=read_codes_names(lis[p])
-            #pi.append(data_html[p][1].split(' ')[0].split('/')[0])
-            #institute.append(data_html[p][0].split(' ')[0].split('/')[0]) 
-            pi.append(pi1)
-            institute.append(institute1)         
-            deployer.append(data_html[p][2])#.split(' ')[0].split('/')[0])
-            project.append(data_html[p][8].upper())
-            drift_type.append(data_html[p][7].split(' ')[0].split('/')[0])
-            #print data_html[p][-1]
+            #idd.append(lis[p])
+            idd.append(int(data_all[p][0]))
+            la=data_all[p][8]
+            lo=data_all[p][7]
+            [las,los]=dd2dm(la,lo)
+            lat_start.append('%8.2f' % las)
+            lon_start.append('%8.2f' % los)
+            start_date.append(n);end_date.append(n);ndays.append(n);start_depth.append(n);end_depth.append(n);yrday0_gmt.append(n)
+            lat_end.append(n);lon_end.append(n)
+            [pi1,institute1,dep]=read_codes_names(int(data_all[p][0]))
+            if pi1=='': # case where we get some info from html rather than codes.dat
+               pi.append(data_html[p][1]) 
+               institute.append(data_html[p][0])
+               manufacturer.append(data_html[p][0])
+            else:       # case where we found info in codes.dat
+               pi.append(pi1)
+               institute.append(institute1) 
+               manufacturer.append(institute1)
+            deployer.append(data_html[p][2])
+            project.append('null')#data_html[p][8].upper())
             notes.append(data_html[p][-1].replace(",", ";"))
-            
-            try:
-                esn.append(int(data_all[p][1])) # if there is no letters this try will work
-                manufacturer.append('null')
-                sat.append('GLOBALSTAR')
-            except:
-                esn.append(data_all[p][1])
-                manufacturer.append('null')
-                sat.append('GLOBALSTAR')
-            #end_date.append(data_raw[q][0:data_raw[q].index('\n')].split(' ')[-2])
-            #end_date=n
-            #yrday0_gmt.append(sdate.timetuple().tm_yday)
-            yrday0_gmt.append(n)
-            #[lae,loe]=dd2dm(float(data_raw[q][0:data_raw[q].index('\n')].split(' ')[7]),float(data_raw[q][0:data_raw[q].index('\n')].split(' ')[6]))
-            lat_end.append(n)#(lae)
-            lon_end.append(n)#(loe)
-            
-            #d=float(data_raw[q][0:data_raw[q].index('\n')].split(' ')[4])# this gets the mid-depth of the drogue
-            d=-1.
+            esn.append(int(data_all[p][1])) # if there is no letters this try will work
+            sat.append('GLOBALSTAR')
+            d=data_all[p][9]
             if d>0: 
                d=-1.0*d # make sure drogue depth is negative
             if d==-1.0:
-               dds.append('-0.5');dde.append('-1.5');dd.append('1.0')# defines the drogue start depth, end depth, and diameter based on mid-depth
+               dds.append('-0.5');dde.append('-1.5');dd.append('1.0');type.append('Irina')# defines the drogue start depth, end depth, and diameter based on mid-depth
             elif d==-0.2:
-               dds.append('-0.0');dde.append('-1.0');dd.append('0.2')# SPOT pipe drifters
+               dds.append('-0.0');dde.append('-1.0');dd.append('0.2');type.append('Pipe')# SPOT pipe drifters
             elif d==-0.4:
-               dds.append('-0.0');dde.append('-0.4');dd.append('0.5')# UMARYLAND mini drifters
+               dds.append('-0.0');dde.append('-0.4');dd.append('0.2');type.append('Mini')# UMARYLAND mini drifters
             elif d==-0.5:
-               dds.append('-0.0');dde.append('-0.5');dd.append('0.5')# bucket drifters
+               dds.append('-0.0');dde.append('-0.5');dd.append('0.25');type.append('Bucket')# bucket drifters
             elif d<-1.0:
-               dds.append(str(d+1.5));dde.append(str(d-1.5));dd.append('1.0')# assumes 3m drogues w/1m diameters
+               dds.append(str(d+1.5));dde.append(str(d-1.5));dd.append(str(d));type.append('drogue')# assumes 3m drogues w/1m diameters
             else:
-               dds.append('999');dde.append('999');dd.append('999')# will need to manually edit these 
+               dds.append('999');dde.append('999');dd.append('999');type.append('unknown')# will need to manually edit these 
             depth.append(str(d))
             continue
             
-f = open(outputfile, 'w')  
-f.writelines('id'+','+'yrday0_gmt'+','+'lat_start'+','+'lon_start'+','+'depth_bottom'+','+'start_date'+','+'drogue_depth_start'+','+'drogue_depth_end'+','+'drogue_diameter'+','+'project'+','+'institute'+','+'pi'+','+'deployer'+','+'type'+','+'manufacturer'+','+'communication'+','+'accuracy'+','+'esn'+','+'yeardays'+','+'notes'+' \n') 
-[f.writelines(str(idd[u])+','+str(yrday0_gmt[u])+','+str(float(lat_start[u]))+','+str(float(lon_start[u]))+','+str(start_depth[u])+','+str(start_date[u])+','+dds[u]+','+dde[u]+','+dd[u]+','+project[u]+','+str(institute[u])+','+pi[u]+','+deployer[u]+','+drift_type[u]+','+manufacturer[u]+','+sat[u]+',null,'+str(esn[u])+','+str(ndays[u])+','+str(notes[u])+','+'\n')  for u in range(len(esn)-1,1)]
+f = open(outputfile, 'a')  
+#f.writelines('id'+','+'yrday0_gmt'+','+'lat_start'+','+'lon_start'+','+'depth_bottom'+','+'start_date'+','+'drogue_depth_start'+','+'drogue_depth_end'+','+'drogue_diameter'+','+'project'+','+'institute'+','+'pi'+','+'deployer'+','+'type'+','+'manufacturer'+','+'communication'+','+'accuracy'+','+'esn'+','+'yeardays'+','+'notes'+' \n') 
+for u in range(len(esn)):
+    f.writelines(str(idd[u])+','+str(yrday0_gmt[u])+','+lat_start[u]+','+lon_start[u]+','+str(start_depth[u])+','+str(start_date[u])+','+dds[u]+','+dde[u]+','+dd[u]+','+project[u]+','+str(institute[u])+','+pi[u]+','+deployer[u]+','+type[u]+','+manufacturer[u]+','+sat[u]+',null,'+str(esn[u])+','+str(ndays[u])+','+str(notes[u])+','+'\n')
 f.close() 
 
 

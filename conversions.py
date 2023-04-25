@@ -6,7 +6,6 @@ import numpy as np
 import math
 from matplotlib.dates import num2date
 from datetime import timedelta
-import pandas as pd
 
 
 def c2f(*c):
@@ -294,16 +293,12 @@ def ll2uv(jd,lat,lon):#jd is yearday
 
 def ll2uv_datetime(dt,lat,lon):#dt is datetime
     "based on yearday,lat,lon.  you can get latitude speed and longitude speed "
-    #dt=dt.values.astype('0')
-    diff_time = np.diff(dt).astype(float)/1000000000.
+    diff_time = []
     ddt=[] # velocity time
     for i in range(len(dt)-1):
-        #diff_time.append((dt[i+1]-dt[i]).seconds)
-        #diff_time.append((dt[i+1]-dt[i])/np.timedelta64(1, 's'))
-        #diff_time.append((dt[i+1]-dt[i])/np.timedelta64(1, 's'))
-        dift=(dt[i+1]-dt[i])/np.timedelta64(1, 's')
+        diff_time.append((dt[i+1]-dt[i]).seconds)
         #print dt[i+1],dt[i],diff_time
-        ddt.append(pd.to_datetime(dt[i])+timedelta(seconds=dift/2.0))
+        ddt.append(dt[i]+timedelta(seconds=diff_time[i]/2.0))
    
     u,v,jdn,spd=[],[],[],[]
     for i in range(len(dt)-1):
