@@ -59,6 +59,8 @@ df = df[df.columns.drop(list(df.filter(regex='Unnamed')))] # gets rid of unwated
 
 # loop through to modify ceratin fields
 for k in range(len(df)):
+    if k % 10:
+        print(k)
     lalo=dm2dd(df['lat_start'][k],df['lon_start'][k])
     #df.btm_depth_start[k]=f"{get_depth(lalo[1],lalo[0],0.4):.1f}"
     df.btm_depth_start[k]=np.nan
