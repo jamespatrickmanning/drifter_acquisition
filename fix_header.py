@@ -53,24 +53,24 @@ def get_drift(id):
     return dfd
 
 ndays,end_date,lat_end,lon_end,distance=[],[],[],[],[]
-df=pd.read_csv('drift2header_apr23.csv')
+df=pd.read_csv('drift2header_apr23_test.csv')
 #df=df[10:13]# for testing
 df = df[df.columns.drop(list(df.filter(regex='Unnamed')))] # gets rid of unwated unnamed columns
 
 # loop through to modify ceratin fields
-for k in range(len(df)):
-    if k % 10:
+for k in range(len(df)):    
+    if k % 10 ==0:
         print(k)
     lalo=dm2dd(df['lat_start'][k],df['lon_start'][k])
-    #df.btm_depth_start[k]=f"{get_depth(lalo[1],lalo[0],0.4):.1f}"
-    df.btm_depth_start[k]=np.nan
+    df.btm_depth_start[k]=f"{get_depth(lalo[1],lalo[0],0.4):.1f}"
+    #df.btm_depth_start[k]=np.nan
     try:
         dfd=get_drift(df.id[k])
         dfd['time (UTC)']=pd.to_datetime(dfd['time (UTC)'])
-        ndays.append(dfd['time (UTC)'][-1]-dfd['time (UTC)'][0])
+        ndays.append((dfd['time (UTC)'].values[-1]-dfd['time (UTC)'].values[0]).astype('timedelta64[D]')/ np.timedelta64(1, 'D'))
         df.start_date[k]=dfd['time (UTC)'][0].strftime("%d-%b-%y")
-        end_date.append(dfd['time (UTC)'][-1].strftime("%d-%b-%y"))
-        lalo=dd2dm(dfd['latitude (degrees_north)'][-1],dfd['longitude (degrees_east)'][-1])
+        end_date.append(pd.to_datetime(dfd['time (UTC)'].values[-1]).strftime("%d-%b-%y"))
+        lalo=dd2dm(dfd['latitude (degrees_north)'].values[-1],dfd['longitude (degrees_east)'].values[-1])
         lat_end.append(lalo[0])
         lon_end.append(lalo[1])
         distance.append(np.nan)
