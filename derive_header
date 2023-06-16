@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jun 13 15:56:23 2023
+
+@author: JiM
+routine to derive drift header lines given just the filename and id of data
+"""
+import pandas as pd
+import numpy as np
+import netCDF4
+from conversions import dd2dm
+from datetime import datetime as dt
+import warnings
+warnings.filterwarnings('ignore')
+
+def get_depth(loni,lati,mindist_allowed):
+    # routine to get depth (meters) using vol1 from NGDC
+    if lati>=40.:
+        url='https://www.ngdc.noaa.gov/thredds/dodsC/crm/crm_vol1.nc'
+    else:
+        url='https://www.ngdc.noaa.gov/thredds/dodsC/crm/crm_vol2.nc'
+    nc = netCDF4.Dataset(url).variables 
+    lon=nc['x'][:]
+    lat=nc['y'][:]
+    xi,yi,min_dist= nearlonlat_zl(lon,lat,loni,lati) 
+    if min_dist>mindist_allowed:
+      depth=np.nan
+    else:
+      depth=nc['z'][yi,xi]
+    return depth#,min_dist
+
+def nearlonlat_zl(lon,lat,lonp,latp): # needed for the next function get_FVCOM_bottom_temp 
+    """ 
+    used in "get_depth"
+    """ 
+    # approximation for small distance 
+    cp=np.cos(latp*np.pi/180.) 
+    dx=(lon-lonp)*cp
+    dy=lat-latp 
+    xi=np.argmin(abs(dx)) 
+    yi=np.argmin(abs(dy))
+    min_dist=111*np.sqrt(dx[xi]**2+dy[yi]**2)
+    return xi,yi,min_dist
+
+df=pd.read_csv('drift2header_jun23.csv')
+
+for k in range(len(df)):
+    print(df['file'][k]+' '+str(df['id'][k]))
+    unders=[n for n in iter(range(len(df['file'][k]))) if df['file'][k].find('_', n) == n]
+    year=int(df['file'][k][unders[1]+1:unders[2]])
+    try:
+        dfd=pd.read_csv('/home/user/drift/web/Drifters/'+df['file'][k]+'.csv')
+    except:
+        dfd=pd.read_csv('http://studentdrifters.org/tracks/'+df['file'][k]+'.csv')
+    dfd=dfd[dfd['ID']==df['id'][k]]
+    df['yrday0_gmt'][k]=dfd['YEARDAY'].values[0]
+    [df['lat_start'][k],df['lon_start'][k]]=dd2dm(dfd['LAT'].values[0],dfd['LON'].values[0])
+    #df['btm_depth_start'][k]==get_depth(dfd['LON'][0],dfd['LAT'][0],0.4)
+    df['start_date'][k]=dt(year,dfd['MTH'].values[0],dfd['DAY'].values[0]).strftime('%d-%b-%y')#ToString("yyyy-MM-dd")
+    if dfd['DEPTH'].values[0]==-1.:
+        df['drogue_depth_start'][k]=-.5
+        df['drogue_depth_end'][k]=-1.5
+        df['drogue_depth_start'][k]=-.5
+        df['type'][k]='Irina'
+        df['droguedia'][k]=1.0
+    elif dfd['DEPTH'].values[0]==-13.:
+        df['drogue_depth_start'][k]=-10.
+        df['drogue_depth_end'][k]=-16.
+        df['droguedia'][k]=0.6
+        df['type'][k]='drogue'
+    #df['project'][k]=input('Project? ')
+    #df['institute'][k]=df['file'][k][unders[0]+1:unders[1]]
+    #df['pi'][k]=input('PI ?')
+    #df['vessel'][k]=input('Vessel ?')
+    #df['manufacturer'][k]=input('Manufacturer ?')
+    df['communication'][k]='GLOBALSTAR'
+    df['accuracy'][k]=3.
+    df['sn'][k]=dfd['ESN'].values[0]
+    df['yeardays'][k]=np.nan
+    #df['notes'][k]=input('notes ?')
+    df['ndays'][k]=(dt(year,dfd['MTH'].values[-1],dfd['DAY'].values[-1],dfd['HR_GMT'].values[-1],dfd['MIN'].values[-1])-dt(year,dfd['MTH'].values[0],dfd['DAY'].values[0],dfd['HR_GMT'].values[0],dfd['MIN'].values[0])).days
+    df['end_date'][k]=dt(year,dfd['MTH'].values[-1],dfd['DAY'].values[-1]).strftime('%d-%b-%y')
+    [df['lat_end'][k],df['lon_end'][k]]=dd2dm(dfd['LAT'].values[-1],dfd['LON'].values[-1])
+
+df.to_csv('drift2header_jun23_fixed.csv')
